@@ -1,0 +1,17 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+.worktrees/
+
+# Xcode user and local build data
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+
+# macOS
+.DS_Store
+
+# CocoaPods / Carthage (for host projects, not SDK source)
+Pods/
+Carthage/Build/
