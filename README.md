@@ -1,68 +1,140 @@
-# TwtVisitorSDK for iOS
+# TwtVisitorSDK
 
-Native WKWebView visitor container. Minimum iOS 15 and Xcode 16+ are recommended. The host must provide an HTTPS visitor URL.
+Embed a visitor chat page in your app with WKWebView.
+
+**Version:** 0.0.1 · **iOS:** 15+ · **License:** Proprietary
+
+Call all public APIs on the main actor.
 
 ## Installation
 
-SPM only: in Xcode choose File → Add Package Dependencies, add https://github.com/TWT-Chat/twt-visitor-ios.git, then select tag 0.0.1 and product TwtVisitorSDK. Deployment Target must be iOS 15 or later. CocoaPods is not published.
+In Xcode: **File → Add Package Dependencies**
 
-## Privacy and quick start
+```
+https://github.com/TWT-Chat/twt-visitor-ios.git
+```
 
-~~~xml
-<key>NSMicrophoneUsageDescription</key><string>Used to send voice messages.</string>
-<key>NSCameraUsageDescription</key><string>Used to capture and send photos or videos.</string>
-<key>NSPhotoLibraryAddUsageDescription</key><string>Used to save chat images.</string>
-<key>UIFileSharingEnabled</key><true/>
-<key>LSSupportsOpeningDocumentsInPlace</key><true/>
-~~~
+Select tag **0.0.1** and product **TwtVisitorSDK**. Set the deployment target to iOS 15 or later.
 
-Do not weaken ATS. Call public APIs on the main actor:
+Add to `Info.plist`:
 
-~~~swift
+```xml
+<key>NSMicrophoneUsageDescription</key>
+<string>Used to send voice messages.</string>
+<key>NSCameraUsageDescription</key>
+<string>Used to capture and send photos or videos.</string>
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>Used to save chat images.</string>
+<key>UIFileSharingEnabled</key>
+<true/>
+<key>LSSupportsOpeningDocumentsInPlace</key>
+<true/>
+```
+
+Do not weaken App Transport Security.
+
+## Quick start
+
+The visitor URL must be HTTPS. Put business parameters in `query` — do not build a query string yourself, and do not put secrets in the URL.
+
+```swift
 import TwtVisitorSDK
 
 let config = VisitorConfiguration(
-    url: URL(string: "https://visitor.example.com/direct/app")!,
-    query: ["visitor_id": "user-123", "source": "ios"],
-    title: "Online support", language: .en, theme: .system,
-    directChatId: nil, newMessageSoundMode: .web, isApp: true
+    url: URL(string: "URL from the console")!
 )
-let handle = try TwtVisitorSDK.present(from: viewController, configuration: config)
-~~~
+let handle = try TwtVisitorSDK.present(from: self, configuration: config, delegate: self)
+```
 
-present creates and presents VisitorViewController and returns VisitorHandle. The host keeps the presenter alive and dismisses the controller; the handle is invalid after dismissal.
+`present` shows `VisitorViewController` and returns `VisitorHandle`. Dismiss it yourself; the handle is invalid afterwards.
 
-## Configuration and public API
+To embed in your own container instead of presenting:
 
-url must be HTTPS. query is UTF-8 percent-encoded by the SDK. isApp adds is_app=1. title sets the native title. language (en, zh-cn, zh-tw, ja, ko, de, fr, pt, ru, es, vi, th, id, ms, tl) becomes lang. theme (light/dark/system) becomes theme. directChatId becomes direct=1&chatid=.... newMessageSoundMode is native or web. Typed fields override duplicate query keys. Never put passwords, cookies or long-lived tokens in the URL.
+```swift
+let vc = try TwtVisitorSDK.makeEmbeddedController(configuration: config, delegate: self)
+TwtVisitorSDK.register(controller: vc)
+addChild(vc)
+view.addSubview(vc.view)
+vc.didMove(toParent: self)
+```
 
-- TwtVisitorSDK.present(from:configuration:animated:delegate:) validates the URL and presents a page.
-- TwtVisitorSDK.makeEmbeddedController(configuration:delegate:) creates an unpresented controller for Flutter PlatformView; the host embeds and removes it.
-- TwtVisitorSDK.register(controller:) registers the active embedded controller for unified setTheme and download status calls.
-- TwtVisitorSDK.bridgeDelegate is a weak global delegate; a per-present delegate takes precedence.
-- VisitorHandle.setTheme, reportDownloadStatus and close operate on the session.
-- TwtVisitorSDK.clearSiteData(for:) async throws clears data for the target host after dismissal.
+## Configuration
 
-## Delegate events
+| Field | Description |
+| --- | --- |
+| `url` | HTTPS URL from the console |
+| `query` | Business parameters, UTF-8 encoded by the SDK |
+| `isApp` | Adds `is_app=1` and shows a close button |
+| `title` | Native title |
+| `language` | `en`, `zh-cn`, `zh-tw`, `ja`, `ko`, `de`, `fr`, `pt`, `ru`, `es`, `vi`, `th`, `id`, `ms`, `tl` |
+| `theme` | `light` / `dark` / `system`. Runtime `setTheme` accepts only `light` / `dark` |
+| `directChatId` | Opens a conversation (`direct=1&chatid=`) |
+| `newMessageSoundMode` | `web` or `native` |
 
-VisitorBridgeDelegate is weak; releasing it stops callbacks. Callbacks run on the main actor:
-- visitorDownloadRequested contains requestId/url/type/fileName/mimeType/callback. After downloading, report VisitorDownloadStatus(requestId:status:path:errorCode:message:) with started/completed/failed/cancelled.
-- visitorNewMessage signals a new message and may repeat; deduplicate in the host.
-- visitorBack returns true when the host consumed back; false allows dismissal.
-- visitorPermissionResult contains requestId, granted, canAskAgain and resources.
+Typed fields (`isApp`, `language`, `theme`, `directChatId`) override the same keys in `query`. Do not put `is_app` / `lang` / `theme` / `direct` / `chatid` in `query`.
 
-## Navigation, permissions and data cleanup
+## Query parameters
 
-Only same-origin HTTPS top-level pages stay in the container. Cross-origin HTTPS opens in the system browser; HTTP, file, javascript and custom schemes are rejected. Only same-origin HTTPS microphone requests enter the system permission flow; camera and combined audio/video requests are denied. File inputs are handled by WebKit; no AppBridge is injected. Cookies, Local Storage and IndexedDB persist by default.
+`query` is an opaque map: the SDK only encodes it. Anonymous visitors can omit it.
 
-Cleanup selects the longest matching WebKit record for the target host. Sibling subdomains in one record may be removed; global cleanup is never used. siteInUse means an active session still uses the host; websiteDataVerificationFailed means post-delete verification failed; invalidURL, invalidQueryKey and invalidDirectChatID indicate invalid input. Dismiss all sessions and wait for dismissal to finish before cleanup when switching accounts.
+```swift
+query: [
+    "sbs": "user-123",
+    "sbs_mm": signature,
+    "ranstr": randomStr,
+    "name": "Zhang San",
+]
+```
 
-## Verification
+| Parameter | Required | Meaning |
+| --- | --- | --- |
+| `sbs` | When binding a user | Unique business-user id; the visitor page uses it to identify a logged-in customer |
+| `sbs_mm` | If `sbs` is set | Signature of `sbs` |
+| `ranstr` | If signing | Random string used in the signature |
+| `name` | Optional | Visitor name shown in the agent console |
+| `nickname` | Optional | Visitor nickname |
+| `email` | Optional | Visitor email |
+| `phone` | Optional | Visitor phone |
+| `customer_remark` | Optional | Remark sent with login |
+| `ext_fk_id` | Optional | Existing visitor id, to resume that visitor's history |
+| `referer` | Optional | Source page URL (also accepts `referer_url`) |
+| `source_title` | Optional | Source page title |
 
-~~~bash
-swift package describe
-xcodebuild -scheme TwtVisitorSDK -destination 'generic/platform=iOS' build
-xcodebuild -project Sample/TwtVisitorSample.xcodeproj -scheme TwtVisitorSample -destination 'generic/platform=iOS' build
-~~~
+Do not send `visitor_id` or `source=ios`. Mark an in-app open with `isApp = true`.
 
-On a real device verify microphone, photo/video/file upload, WSS, background/lock-screen behavior, weak-network retry, back navigation and account switching.
+## API
+
+| Method | Description |
+| --- | --- |
+| `present(from:configuration:animated:delegate:)` | Present a session |
+| `makeEmbeddedController(configuration:delegate:)` | Create an unpresented view controller |
+| `register(controller:)` | Register an embedded controller for theme / download calls |
+| `handle.setTheme` / `reportDownloadStatus` / `close` | Session controls |
+| `clearSiteData(for:) async throws` | Clear WebKit data for the host |
+
+Download status: `started` / `completed` / `failed` / `cancelled`. Photo library completions use `photos://localIdentifier`.
+
+Errors: `invalidURL`, `invalidQueryKey`, `invalidDirectChatID`, `siteInUse`, `websiteDataVerificationFailed`.
+
+## Delegate
+
+`VisitorBridgeDelegate` is weak. Callbacks run on the main actor.
+
+- `visitorDownloadRequested` — download, then report status
+- `visitorNewMessage` — may repeat; deduplicate in the host
+- `visitorBack() -> Bool` — return `true` if you handled it
+- `visitorPermissionResult`
+
+## Behavior
+
+- Same-origin HTTPS stays in the web view; cross-origin HTTPS opens in the system browser; other schemes are blocked.
+- Same-origin HTTPS microphone and camera capture can request system permission. Cross-origin requests are denied.
+- File picking uses the system panel.
+- Cookies, Local Storage, and IndexedDB persist.
+- Cleanup matches the longest WebKit record for the host (sibling subdomains in that record may be removed). It never wipes all website data.
+- Switch accounts: dismiss → wait until disappear finishes → `clearSiteData` → present again.
+
+## Links
+
+- [Android SDK](https://github.com/TWT-Chat/twt-visitor-android)
+- [Flutter plugin](https://github.com/TWT-Chat/visitor_flutter)
