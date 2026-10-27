@@ -46,7 +46,6 @@ public struct VisitorConfiguration: Sendable {
     public var query: [String: String]
     /// Whether the page is opened from an app; when enabled the URL carries `is_app=1` for the visitor page to detect.
     public var isApp: Bool
-    public var title: String?
     public var language: VisitorLanguage
     public var theme: VisitorTheme
     public var directChatId: String?
@@ -55,7 +54,6 @@ public struct VisitorConfiguration: Sendable {
     public init(
         url: URL = Self.defaultVisitorURL,
         query: [String: String] = [:],
-        title: String? = nil,
         language: VisitorLanguage = .zhCn,
         theme: VisitorTheme = .system,
         directChatId: String? = nil,
@@ -65,7 +63,6 @@ public struct VisitorConfiguration: Sendable {
         self.url = url
         self.query = query
         self.isApp = isApp
-        self.title = title
         self.language = language
         self.theme = theme
         self.directChatId = directChatId

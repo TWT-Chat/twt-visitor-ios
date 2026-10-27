@@ -56,7 +56,6 @@ enum CustomVisitorConfigurationBuilder {
         return VisitorConfiguration(
             url: url,
             query: try parseQuery(input.queryText),
-            title: "Online support",
             language: input.language,
             theme: input.theme,
             directChatId: directChatIDValue

@@ -5,10 +5,13 @@ public protocol VisitorBridgeDelegate: AnyObject {
     func visitorNewMessage()
     func visitorBack() -> Bool
     func visitorPermissionResult(requestId: String, granted: Bool, canAskAgain: Bool, resources: [String])
+    /// Web page title; the SDK renders no title bar, so the host shows it in its own UI.
+    func visitorTitleChanged(_ title: String)
 }
 
 public extension VisitorBridgeDelegate {
     func visitorPermissionResult(requestId: String, granted: Bool, canAskAgain: Bool, resources: [String]) {}
+    func visitorTitleChanged(_ title: String) {}
 }
 
 public struct VisitorDownloadStatus: Sendable {

@@ -3,25 +3,26 @@ import UIKit
 import WebKit
 import AVFoundation
 
-/// Internal chat container for the SDK: a persistent WKWebView, basic title and close chrome, retry on error, and safe-area layout.
+/// Internal chat container for the SDK: a persistent WKWebView, retry on error, and safe-area layout.
+/// The SDK renders no title bar; the host shows the page title from `visitorTitleChanged` in its own UI.
 @MainActor
 public final class VisitorViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     public let configuration: VisitorConfiguration
-    private let showsChrome: Bool
+
     private(set) var webView: WKWebView!
-    private let titleLabel = UILabel()
     private let errorLabel = UILabel()
     private let retryButton = UIButton(type: .system)
     private var activityToken: VisitorActivityRegistry.Token?
     private let resolvedURL: URL
     private var hasLoadedSuccessfully = false
+    /// 单页应用会在加载后改标题，`didFinish` 只拿得到首次标题，因此额外盯住 `webView.title`。
+    private var titleObservation: NSKeyValueObservation?
     public let sessionId = UUID().uuidString
     public weak var bridgeDelegate: VisitorBridgeDelegate?
     private var downloadCallbacks: [String: String] = [:]
 
-    public init(configuration: VisitorConfiguration, showsChrome: Bool = true) throws {
+    public init(configuration: VisitorConfiguration) throws {
         self.configuration = configuration
-        self.showsChrome = showsChrome
         self.resolvedURL = try VisitorURLPolicy.makeURL(from: configuration)
         super.init(nibName: nil, bundle: nil)
         self.activityToken = VisitorActivityRegistry.shared.acquire(host: resolvedURL.host ?? "")
@@ -34,7 +35,7 @@ public final class VisitorViewController: UIViewController, WKNavigationDelegate
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
         configureWebView()
-        if showsChrome { configureChrome() } else { configureErrorUI() }
+        configureErrorUI()
         webView.load(URLRequest(url: resolvedURL))
     }
 
@@ -47,20 +48,28 @@ public final class VisitorViewController: UIViewController, WKNavigationDelegate
         configuration.userContentController.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: false))
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
+        // 标题由宿主自行展示；SDK 只把网页标题透传出去，并在单页应用改标题时同步。
+        titleObservation = webView.observe(\.title, options: [.new]) { [weak self] webView, _ in
+            MainActor.assumeIsolated {
+                guard let title = webView.title, !title.isEmpty else { return }
+                self?.bridgeDelegate?.visitorTitleChanged(title)
+            }
+        }
         webView.uiDelegate = self
         // Enable the edge-swipe back gesture so in-page history navigation matches the system back gesture.
         webView.allowsBackForwardNavigationGestures = true
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
-        let topAnchor = showsChrome ? view.safeAreaLayoutGuide.topAnchor : view.topAnchor
-        let bottomAnchor = showsChrome ? view.safeAreaLayoutGuide.bottomAnchor : view.bottomAnchor
-        let leadingAnchor = showsChrome ? view.safeAreaLayoutGuide.leadingAnchor : view.leadingAnchor
-        let trailingAnchor = showsChrome ? view.safeAreaLayoutGuide.trailingAnchor : view.trailingAnchor
+        // 始终贴安全区：宿主套导航栏时网页不会钻到栏下面被盖住。
+        let topAnchor = view.safeAreaLayoutGuide.topAnchor
+        let bottomAnchor = view.safeAreaLayoutGuide.bottomAnchor
+        let leadingAnchor = view.safeAreaLayoutGuide.leadingAnchor
+        let trailingAnchor = view.safeAreaLayoutGuide.trailingAnchor
         NSLayoutConstraint.activate([
             webView.leadingAnchor.constraint(equalTo: leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            webView.topAnchor.constraint(equalTo: topAnchor, constant: showsChrome ? 44 : 0),
+            webView.topAnchor.constraint(equalTo: topAnchor),
             webView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
     }
@@ -70,30 +79,6 @@ public final class VisitorViewController: UIViewController, WKNavigationDelegate
         let params = object["params"] as? [String: Any] ?? [:]
         if method == "new_message" { bridgeDelegate?.visitorNewMessage() }
         if method == "download", let raw = params["url"] as? String, let url = URL(string: raw) { let id = params["requestId"] as? String ?? UUID().uuidString; let callback = object["callback"] as? String; if let callback { downloadCallbacks[id] = callback }; bridgeDelegate?.visitorDownloadRequested(requestId: id, url: url, type: params["type"] as? String ?? "file", fileName: params["fileName"] as? String, mimeType: params["mimeType"] as? String, callback: callback) }
-    }
-
-    private func configureChrome() {
-        let bar = UIView(); bar.translatesAutoresizingMaskIntoConstraints = false; bar.backgroundColor = .systemBackground
-        view.addSubview(bar)
-        titleLabel.text = configuration.title ?? "Online support"; titleLabel.font = .preferredFont(forTextStyle: .headline); titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        let close = UIButton(type: .system); close.setTitle("Close", for: .normal); close.addTarget(self, action: #selector(closeTapped), for: .touchUpInside); close.translatesAutoresizingMaskIntoConstraints = false
-        bar.addSubview(titleLabel); bar.addSubview(close)
-        NSLayoutConstraint.activate([
-            bar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor), bar.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor), bar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), bar.heightAnchor.constraint(equalToConstant: 44),
-            titleLabel.centerYAnchor.constraint(equalTo: bar.centerYAnchor), titleLabel.centerXAnchor.constraint(equalTo: bar.centerXAnchor), close.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -16), close.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
-        ])
-        errorLabel.isHidden = true; errorLabel.numberOfLines = 0; errorLabel.textAlignment = .center; errorLabel.translatesAutoresizingMaskIntoConstraints = false
-        retryButton.isHidden = true; retryButton.setTitle("Retry", for: .normal); retryButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside); retryButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(errorLabel); view.addSubview(retryButton)
-        NSLayoutConstraint.activate([
-            errorLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
-            errorLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            errorLabel.centerXAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerXAnchor),
-            errorLabel.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor, constant: -20),
-            retryButton.centerXAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerXAnchor),
-            retryButton.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor),
-            retryButton.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 12),
-        ])
     }
 
     private func configureErrorUI() {
@@ -117,7 +102,6 @@ public final class VisitorViewController: UIViewController, WKNavigationDelegate
         ])
     }
 
-    @objc private func closeTapped() { dismiss(animated: true) { [weak self] in self?.releaseActivity() } }
     @objc private func retryTapped() { retry() }
 
     /// Clears the error message and reloads the initial visitor URL.
@@ -153,7 +137,9 @@ public final class VisitorViewController: UIViewController, WKNavigationDelegate
     var isErrorVisible: Bool { !errorLabel.isHidden }
     var isRetryVisible: Bool { !retryButton.isHidden }
 
-    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { hasLoadedSuccessfully = true }
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        hasLoadedSuccessfully = true
+    }
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { if !hasLoadedSuccessfully { showError(error) } }
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { if !hasLoadedSuccessfully { showError(error) } }
     func showError(_ error: Error) { errorLabel.text = "Failed to load the page. Check your network and try again."; errorLabel.isHidden = false; retryButton.isHidden = false }

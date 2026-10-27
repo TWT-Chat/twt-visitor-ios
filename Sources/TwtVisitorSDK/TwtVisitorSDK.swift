@@ -32,15 +32,18 @@ public enum TwtVisitorSDK {
     public static func register(controller: VisitorViewController) { activeController = controller }
     /// Creates a visitor controller that does not present itself, for host containers such as a Flutter PlatformView.
     public static func makeEmbeddedController(configuration: VisitorConfiguration, delegate: VisitorBridgeDelegate? = nil) throws -> VisitorViewController {
-        let controller = try VisitorViewController(configuration: configuration, showsChrome: false)
+        let controller = try VisitorViewController(configuration: configuration)
         controller.bridgeDelegate = delegate ?? bridgeDelegate
         register(controller: controller)
         return controller
     }
     @discardableResult public static func present(from presenter: UIViewController, configuration: VisitorConfiguration = .init(), animated: Bool = true, delegate: VisitorBridgeDelegate? = nil) throws -> VisitorHandle {
         _ = try VisitorURLPolicy.makeURL(from: configuration)
+        // 与 Android 的 VisitorActivity 一致：整屏裸 WebView，标题栏由宿主自行实现。
         let controller = try VisitorViewController(configuration: configuration)
         controller.bridgeDelegate = delegate ?? bridgeDelegate
+        // 独立页整屏展示，而不是 iOS 13+ 默认的 pageSheet 卡片。
+        controller.modalPresentationStyle = .fullScreen
         presenter.present(controller, animated: animated)
         return VisitorHandle(sessionId: controller.sessionId, controller: controller)
     }

@@ -2,7 +2,7 @@
 
 Embed a visitor chat page in your app with WKWebView.
 
-**Version:** 0.0.1 · **iOS:** 15+ · **License:** Proprietary
+**Version:** 0.0.2 · **iOS:** 15+ · **License:** Proprietary
 
 Call all public APIs on the main actor.
 
@@ -14,7 +14,7 @@ In Xcode: **File → Add Package Dependencies**
 https://github.com/TWT-Chat/twt-visitor-ios.git
 ```
 
-Select tag **0.0.1** and product **TwtVisitorSDK**. Set the deployment target to iOS 15 or later.
+Select tag **0.0.2** and product **TwtVisitorSDK**. Set the deployment target to iOS 15 or later.
 
 Add to `Info.plist`:
 
@@ -46,7 +46,7 @@ let config = VisitorConfiguration(
 let handle = try TwtVisitorSDK.present(from: self, configuration: config, delegate: self)
 ```
 
-`present` shows `VisitorViewController` and returns `VisitorHandle`. Dismiss it yourself; the handle is invalid afterwards.
+`present` shows a bare `VisitorViewController` full screen (`modalPresentationStyle = .fullScreen`, no title bar — same as the Android activity) and returns `VisitorHandle`. Dismiss it yourself; the handle is invalid afterwards.
 
 To embed in your own container instead of presenting:
 
@@ -58,14 +58,15 @@ view.addSubview(vc.view)
 vc.didMove(toParent: self)
 ```
 
+For a normal page — system status bar on top, then a back button and the page title — put the embedded controller in a `UINavigationController` and set `navigationItem.title` from `visitorTitleChanged` — see `Sample/TwtVisitorSample/MainViewController.swift`. On iOS 26 the navigation bar is glass and samples whatever sits behind it, so give it an opaque `UINavigationBarAppearance`; otherwise the title can disappear against the WebView background.
+
 ## Configuration
 
 | Field | Description |
 | --- | --- |
 | `url` | HTTPS URL from the console |
 | `query` | Business parameters, UTF-8 encoded by the SDK |
-| `isApp` | Adds `is_app=1` and shows a close button |
-| `title` | Native title |
+| `isApp` | Adds `is_app=1`; the SDK still draws no chrome, the host keeps its own back button |
 | `language` | `en`, `zh-cn`, `zh-tw`, `ja`, `ko`, `de`, `fr`, `pt`, `ru`, `es`, `vi`, `th`, `id`, `ms`, `tl` |
 | `theme` | `light` / `dark` / `system`. Runtime `setTheme` accepts only `light` / `dark` |
 | `directChatId` | Opens a conversation (`direct=1&chatid=`) |
@@ -124,6 +125,7 @@ Errors: `invalidURL`, `invalidQueryKey`, `invalidDirectChatID`, `siteInUse`, `we
 - `visitorNewMessage` — may repeat; deduplicate in the host
 - `visitorBack() -> Bool` — return `true` if you handled it
 - `visitorPermissionResult`
+- `visitorTitleChanged` — web page title for your own title bar; the SDK draws none
 
 ## Behavior
 
