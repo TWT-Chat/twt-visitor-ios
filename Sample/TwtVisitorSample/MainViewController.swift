@@ -26,7 +26,7 @@ final class MainViewController: UIViewController {
         let button = UIButton(type: .system); button.setTitle(title, for: .normal); button.addTarget(self, action: action, for: .touchUpInside); return button
     }
 
-    /// 示例默认配置：换成控制台地址即可；query 里的业务参数由访客页自己解析。
+    /// Sample default configuration: swap in the console URL; the visitor page parses the query values itself.
     private static let defaultConfiguration = VisitorConfiguration(
         url: URL(string: "")!,
         query: [:]
@@ -42,7 +42,7 @@ final class MainViewController: UIViewController {
     }
     private func present(configuration: VisitorConfiguration) {
         do {
-            // SDK 只提供裸 WebView：示例自己把返回键和标题画在容器的导航栏里。
+            // The SDK only provides a bare WebView: the sample draws the back button and title in its own navigation bar.
             let visitor = try TwtVisitorSDK.makeEmbeddedController(configuration: configuration, delegate: self)
             visitor.navigationItem.leftBarButtonItem = UIBarButtonItem(
                 image: UIImage(systemName: "chevron.backward"),
@@ -53,7 +53,7 @@ final class MainViewController: UIViewController {
             visitor.navigationItem.title = "Online support"
             visitorController = visitor
             let container = UINavigationController(rootViewController: visitor)
-            // 用不透明的 appearance 固定导航栏底色和标题颜色；iOS 26 的玻璃栏会采样底层颜色，容易把标题吃没。
+            // Use an opaque appearance so the bar background and title colour stay fixed; the iOS 26 glass bar samples what sits behind it and can swallow the title.
             let appearance = UINavigationBarAppearance()
             appearance.configureWithOpaqueBackground()
             appearance.titleTextAttributes = [.foregroundColor: UIColor.label]
@@ -91,7 +91,7 @@ extension MainViewController: @preconcurrency VisitorBridgeDelegate {
 
     func visitorBack() -> Bool { false }
 
-    /// 标题栏由宿主自行实现：网页标题回显到示例自己的导航栏。
+    /// The host owns the title bar: forward the web page title to the sample's navigation bar.
     func visitorTitleChanged(_ title: String) {
         visitorController?.navigationItem.title = title
     }

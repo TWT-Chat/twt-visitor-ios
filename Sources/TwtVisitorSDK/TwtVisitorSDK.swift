@@ -39,10 +39,10 @@ public enum TwtVisitorSDK {
     }
     @discardableResult public static func present(from presenter: UIViewController, configuration: VisitorConfiguration = .init(), animated: Bool = true, delegate: VisitorBridgeDelegate? = nil) throws -> VisitorHandle {
         _ = try VisitorURLPolicy.makeURL(from: configuration)
-        // 与 Android 的 VisitorActivity 一致：整屏裸 WebView，标题栏由宿主自行实现。
+        // Matches Android's VisitorActivity: a full-screen bare WebView, the host owns any title bar.
         let controller = try VisitorViewController(configuration: configuration)
         controller.bridgeDelegate = delegate ?? bridgeDelegate
-        // 独立页整屏展示，而不是 iOS 13+ 默认的 pageSheet 卡片。
+        // Present full screen instead of the pageSheet card that iOS 13+ uses by default.
         controller.modalPresentationStyle = .fullScreen
         presenter.present(controller, animated: animated)
         return VisitorHandle(sessionId: controller.sessionId, controller: controller)

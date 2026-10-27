@@ -15,7 +15,7 @@ public final class VisitorViewController: UIViewController, WKNavigationDelegate
     private var activityToken: VisitorActivityRegistry.Token?
     private let resolvedURL: URL
     private var hasLoadedSuccessfully = false
-    /// 单页应用会在加载后改标题，`didFinish` 只拿得到首次标题，因此额外盯住 `webView.title`。
+    /// A single page app changes the title after load and `didFinish` only reports the first one, so keep observing `webView.title`.
     private var titleObservation: NSKeyValueObservation?
     public let sessionId = UUID().uuidString
     public weak var bridgeDelegate: VisitorBridgeDelegate?
@@ -48,7 +48,7 @@ public final class VisitorViewController: UIViewController, WKNavigationDelegate
         configuration.userContentController.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: false))
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
-        // 标题由宿主自行展示；SDK 只把网页标题透传出去，并在单页应用改标题时同步。
+        // The host renders the title; the SDK only forwards the web page title and keeps it in sync for single page apps.
         titleObservation = webView.observe(\.title, options: [.new]) { [weak self] webView, _ in
             MainActor.assumeIsolated {
                 guard let title = webView.title, !title.isEmpty else { return }
@@ -61,7 +61,7 @@ public final class VisitorViewController: UIViewController, WKNavigationDelegate
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
-        // 始终贴安全区：宿主套导航栏时网页不会钻到栏下面被盖住。
+        // Always pin to the safe area so the page never slides under a host navigation bar.
         let topAnchor = view.safeAreaLayoutGuide.topAnchor
         let bottomAnchor = view.safeAreaLayoutGuide.bottomAnchor
         let leadingAnchor = view.safeAreaLayoutGuide.leadingAnchor
@@ -78,6 +78,7 @@ public final class VisitorViewController: UIViewController, WKNavigationDelegate
         guard message.name == "AppBridgeChannel", let body = message.body as? String, let data = body.data(using: .utf8), let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let method = object["method"] as? String else { return }
         let params = object["params"] as? [String: Any] ?? [:]
         if method == "new_message" { bridgeDelegate?.visitorNewMessage() }
+
         if method == "download", let raw = params["url"] as? String, let url = URL(string: raw) { let id = params["requestId"] as? String ?? UUID().uuidString; let callback = object["callback"] as? String; if let callback { downloadCallbacks[id] = callback }; bridgeDelegate?.visitorDownloadRequested(requestId: id, url: url, type: params["type"] as? String ?? "file", fileName: params["fileName"] as? String, mimeType: params["mimeType"] as? String, callback: callback) }
     }
 
